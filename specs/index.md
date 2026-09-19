@@ -1,30 +1,9 @@
 # Спецификация протокола PoSoc (v0.13)
 
-Спецификация разделена на отдельные файлы по top-level разделам для удобства навигации и поддержки.
+Спецификация разделена на концептуальную и реализационную части; глоссарий остаётся отдельным файлом.
 
 ## Содержание
 
-### Concept
-
-- [00_intro.md](concept/00_intro.md) - Заголовок и введение
-- [01_intro_principles.md](concept/01_intro_principles.md) - Назначение, принципы, модель угроз
-- [02_architecture.md](concept/02_architecture.md) - Архитектура
-- [03_links.md](concept/03_links.md) - Связи
-- [04_l0.md](concept/04_l0.md) - Базовые группы (L0)
-- [05_hierarchy.md](concept/05_hierarchy.md) - Эмерджентная иерархия
-- [06_trust.md](concept/06_trust.md) - Потребление доверия
-- [07_defenses.md](concept/07_defenses.md) - Защитные механизмы
-- [09_parameters.md](concept/09_parameters.md) - Параметры (значения по умолчанию)
-- [10_limitations.md](concept/10_limitations.md) - Ограничения и открытые вопросы
-- [11_privacy_zkp.md](concept/11_privacy_zkp.md) - Приватность через ZKP (roadmap, вне базовой версии)
-
-### Implementation
-
-- [01_records_formats.md](implementation/01_records_formats.md) - Канонизация и форматы записей (норматив)
-- [02_crypto.md](implementation/02_crypto.md) - Криптография и объёмы
-- [03_reference_implementations.md](implementation/03_reference_implementations.md) - Эталонные реализации
-- [04_node_transport.md](implementation/04_node_transport.md) - Транспорт и узловая инженерия: транспорт = соцграф, обработка записи, anti-entropy, модель доставки и сходимости (ARCH-2.2.1, ARCH-2.2.3, ARCH-2.5)
-
-### Прочее
-
-- [glossary.md](glossary.md) - GLOSSARY
+- [concept.md](concept.md) — концепция, принципы, семантика, математика, гарантии и ограничения.
+- [implementation.md](implementation.md) — форматы, криптография, транспорт, узловая механика и эталонные реализации.
+- [glossary.md](glossary.md) — глоссарий терминов.

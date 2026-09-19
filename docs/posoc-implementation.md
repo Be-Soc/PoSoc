@@ -8,42 +8,42 @@
 
 Спецификация (implementation):
 
-- [01_records_formats.md](../specs/implementation/01_records_formats.md) — канонизация (CBOR, BLAKE3) и нормативные форматы записей, идентификаторы групп.
-- [02_crypto.md](../specs/implementation/02_crypto.md) — криптография (Ed25519, BLAKE3), объёмы записей, подписная нагрузка на человека.
-- [03_reference_implementations.md](../specs/implementation/03_reference_implementations.md) — эталонные реализации: обязательные компоненты; реализации v0.11 — отдельный артефакт.
-- [04_node_transport.md](../specs/implementation/04_node_transport.md) — транспорт = социальный граф, обработка записи на узле, anti-entropy, модель сходимости.
+- [implementation.md](../specs/implementation.md) — канонизация (CBOR, BLAKE3) и нормативные форматы записей, идентификаторы групп.
+- [implementation.md](../specs/implementation.md) — криптография (Ed25519, BLAKE3), объёмы записей, подписная нагрузка на человека.
+- [implementation.md](../specs/implementation.md) — обязательные компоненты эталонных реализаций v0.11; сами реализации являются отдельным артефактом.
+- [implementation.md](../specs/implementation.md) — транспорт = социальный граф, обработка записи на узле, anti-entropy, модель сходимости.
 
 Смежные материалы:
 
 - [posoc-concept.md](posoc-concept.md) — концепция протокола: принципы, ментальная модель, гарантии и негарантии, параметры. Для смысла механизмов — туда.
-- [02_architecture.md](../specs/concept/02_architecture.md) — архитектура (concept): номенклатура записей, LWW и revoke-семантика, смерть ключа ([ARCH-2.3.2](../specs/concept/02_architecture.md#arch-2.3.2)); транспортные пункты перенесены из неё в implementation-часть.
-- [09_parameters.md](../specs/concept/09_parameters.md) — нормативные значения по умолчанию: от $T_{life}$ и rate-limit'ов зависит cadence подписной нагрузки.
+- [concept.md](../specs/concept.md) — архитектура (concept): номенклатура записей, LWW и revoke-семантика, смерть ключа ([ARCH-2.3.2](../specs/concept.md#arch-2.3.2)); транспортные пункты перенесены из неё в implementation-часть.
+- [concept.md](../specs/concept.md) — нормативные значения по умолчанию: от $T_{life}$ и rate-limit'ов зависит cadence подписной нагрузки.
 - [glossary.md](../specs/glossary.md) — глоссарий всех терминов протокола.
 
 ## 1. Криптография и объёмы
 
-Схемы этого раздела — конкретизация абстрактных требований concept (подпись, детерминированное хеширование, каноническая сериализация): сам concept от конкретных примитивов не зависит. Замена примитивов допустима при сохранении абстрактных свойств — невозможности подделки подписи, коллизионной устойчивости хеширования, детерминированности канонизации; такое изменение — форк параметров ([LIM-10.15](../specs/concept/10_limitations.md#lim-10.15)).
+Схемы этого раздела — конкретизация абстрактных требований concept (подпись, детерминированное хеширование, каноническая сериализация): сам concept от конкретных примитивов не зависит. Замена примитивов допустима при сохранении абстрактных свойств — невозможности подделки подписи, коллизионной устойчивости хеширования, детерминированности канонизации; такое изменение — форк параметров ([LIM-10.15](../specs/concept.md#lim-10.15)).
 
 - **Подписи:** Ed25519 (открытый ключ 32 Б, подпись 64 Б); интерфейс допускает постквантовые схемы.
-- **Хеши:** BLAKE3 с доменным разделением по типам записей ([FMT-2.8](../specs/implementation/01_records_formats.md#fmt-2.8)).
-- **Канонизация:** детерминированный канонический CBOR — ключи отсортированы, пары ключей упорядочены лексикографически, самосвязи запрещены, округления порогов — $\lfloor x + 10^{-9} \rfloor$ ([FMT-2.7](../specs/implementation/01_records_formats.md#fmt-2.7)).
+- **Хеши:** BLAKE3 с доменным разделением по типам записей ([FMT-2.8](../specs/implementation.md#fmt-2.8)).
+- **Канонизация:** детерминированный канонический CBOR — ключи отсортированы, пары ключей упорядочены лексикографически, самосвязи запрещены, округления порогов — $\lfloor x + 10^{-9} \rfloor$ ([FMT-2.7](../specs/implementation.md#fmt-2.7)).
 - **Канал уведомлений (опционально):** $s_{uv} = \mathrm{HKDF}(\mathrm{X25519}(x_u, pk_v))$ — координация продлений и подписей `FRIEND`; не источник истины.
 
-Объёмы записей: `FRIEND` ≈ 200 Б; одиночные объекты и revoke ≈ 150 Б; `MEMBER_OF` ≈ 150 Б — 30 подтверждений ≈ 30 × 150 Б (подписная нагрузка та же, записи поштучно). Подписная нагрузка на человека скромна — порядка 80–100 тихих записей в год: ≈ 60 продлений `FRIEND` + 2 само-членства `MEMBER_OF` + подтверждения членов поштучно (`MEMBER_OF`) + ~$2D \approx 16\text{–}20$ заявлений `MEMBER_OF` в сообщества (специфицируемая часть этой нагрузки — cadence TTL, то есть значения из [09_parameters.md](../specs/concept/09_parameters.md)). Пропускная способность, политика relay и объём хранилищ — вне спецификации (implementation-defined).
+Объёмы записей: `FRIEND` ≈ 200 Б; одиночные объекты и revoke ≈ 150 Б; `MEMBER_OF` ≈ 150 Б — 30 подтверждений ≈ 30 × 150 Б (подписная нагрузка та же, записи поштучно). Подписная нагрузка на человека скромна — порядка 80–100 тихих записей в год: ≈ 60 продлений `FRIEND` + 2 само-членства `MEMBER_OF` + подтверждения членов поштучно (`MEMBER_OF`) + ~$2D \approx 16\text{–}20$ заявлений `MEMBER_OF` в сообщества (специфицируемая часть этой нагрузки — cadence TTL, то есть значения из [concept.md](../specs/concept.md)). Пропускная способность, политика relay и объём хранилищ — вне спецификации (implementation-defined).
 
-Норматив: [02_crypto.md](../specs/implementation/02_crypto.md).
+Норматив: [implementation.md](../specs/implementation.md).
 
 ## 2. Форматы записей и канонизация
 
 Всякая запись — конверт `Record = {type, t_sign, payload, sigs}`. Подписи — массив `{pk, sig}`, **отсортированный по pk**. Подписываемая нагрузка — канонический CBOR `{type, t_sign, payload}`: каждый подписант подписывает одни и те же байты. Идентичность записи — $H(\mathrm{record})$ от полных канонических байтов; дедупликация по содержимому, поэтому повторная доставка того же байта не порождает отдельного факта.
 
-Нормативная таблица payload'ов и подписантов всех типов записей — в [01_records_formats.md](../specs/implementation/01_records_formats.md#fmt-2.8); семантика каждого типа (что запись означает и на что влияет) — в концепции ([posoc-concept.md](posoc-concept.md), норматив — [02_architecture.md](../specs/concept/02_architecture.md#arch-2.3)). Канонизационные правила (сортировка ключей, лексикографический порядок пар, доменное разделение хеша по тегам типов, tie-break по $H(\mathrm{record})$) — [FMT-2.7](../specs/implementation/01_records_formats.md#fmt-2.7).
+Нормативная таблица payload'ов и подписантов всех типов записей — в [implementation.md](../specs/implementation.md#fmt-2.8); семантика каждого типа (что запись означает и на что влияет) — в концепции ([posoc-concept.md](posoc-concept.md), норматив — [concept.md](../specs/concept.md#arch-2.3)). Канонизационные правила (сортировка ключей, лексикографический порядок пар, доменное разделение хеша по тегам типов, tie-break по $H(\mathrm{record})$) — [FMT-2.7](../specs/implementation.md#fmt-2.7).
 
 Идентификаторы групп вычисляются из содержимого, без реестра: $ID_G = H(\texttt{"L0"} \Vert \text{descriptor} \Vert pk_{initiator} \Vert t_{sign})$ для базовых групп; $ID_{GH} = H(\texttt{"GROUP"} \Vert \text{descriptor} \Vert pk_{founder})$ для сообществ, где founder — pk первой по $t_{sign}$ записи `MEMBER_OF` с `group: ID_GH` (техническая роль без привилегий).
 
-**`KEY_LOSS`.** Payload — `{memo?: bstr ≤ 256}`; единственный подписант — сам отзываемый ключ (`sigs = [self]`): payload идентифицирующих полей не содержит, отзываемый ключ определяется подписью. Смысл записи — смерть ключа: все записи ключа невалидны от момента отзыва, экземпляр на ключ один, отзыв безвозвратен (семантика — в концепции: [posoc-concept.md](posoc-concept.md), «Связи»; норматив — [ARCH-2.3.2](../specs/concept/02_architecture.md#arch-2.3.2)).
+**`KEY_LOSS`.** Payload — `{memo?: bstr ≤ 256}`; единственный подписант — сам отзываемый ключ (`sigs = [self]`): payload идентифицирующих полей не содержит, отзываемый ключ определяется подписью. Смысл записи — смерть ключа: все записи ключа невалидны от момента отзыва, экземпляр на ключ один, отзыв безвозвратен (семантика — в концепции: [posoc-concept.md](posoc-concept.md), «Связи»; норматив — [ARCH-2.3.2](../specs/concept.md#arch-2.3.2)).
 
-Норматив: [01_records_formats.md](../specs/implementation/01_records_formats.md).
+Норматив: [implementation.md](../specs/implementation.md).
 
 ## 3. Транспорт и узловая механика
 
@@ -53,22 +53,22 @@
 
 **Обработка записи:** проверка (подписи, каноническая форма, применимость) → применение к БД → постановка в sync queue → рассылка соседям. Задержанная (например, цензурированная соседом) запись применяется со своей $t_{sign}$: цензура подавляет доставку, но не искажает семантику.
 
-**Gossip и anti-entropy:** gossip при появлении записи плюс периодическая по расписанию сверка множеств записей с каждым соседом — реконсиляция по диапазонам времени и хешам, расхождения подтягиваются. Утаивание записей соседом обнаруживается сверкой через других соседей (риск единственного моста — признанное ограничение, [LIM-10.9](../specs/concept/10_limitations.md#lim-10.9)).
+**Gossip и anti-entropy:** gossip при появлении записи плюс периодическая по расписанию сверка множеств записей с каждым соседом — реконсиляция по диапазонам времени и хешам, расхождения подтягиваются. Утаивание записей соседом обнаруживается сверкой через других соседей (риск единственного моста — признанное ограничение, [LIM-10.9](../specs/concept.md#lim-10.9)).
 
 **Сходимость:** согласованность — в пределе; в моменте разные узлы имеют субъективные виды. Потребитель доверия всегда читает текущее состояние своей replica.
 
-Норматив: [04_node_transport.md](../specs/implementation/04_node_transport.md).
+Норматив: [implementation.md](../specs/implementation.md).
 
 ## 4. Эталонные реализации
 
 Спецификация нормативна; реализации v0.11 — отдельный артефакт. Обязательные компоненты эталонной реализации:
 
-1. **Reconstruction пары** — binding, per-direction max-$t_{sign}$, кламп, truce ([LINK-3.2](../specs/concept/03_links.md#link-3.2)).
-2. **Roster L0** — cap, growth priority, synchronous rounds ([L0-4.3](../specs/concept/04_l0.md#l0-4.3)).
-3. **Вывод рёбер** — all-pairs C2, acyclicity C3, hold window, S-bootstrap, freeze ∥ window ([HIER-5.5](../specs/concept/05_hierarchy.md#hier-5.5)–[HIER-5.6](../specs/concept/05_hierarchy.md#hier-5.6)).
+1. **Reconstruction пары** — binding, per-direction max-$t_{sign}$, кламп, truce ([LINK-3.2](../specs/concept.md#link-3.2)).
+2. **Roster L0** — cap, growth priority, synchronous rounds ([L0-4.3](../specs/concept.md#l0-4.3)).
+3. **Вывод рёбер** — all-pairs C2, acyclicity C3, hold window, S-bootstrap, freeze ∥ window ([HIER-5.5](../specs/concept.md#hier-5.5)–[HIER-5.6](../specs/concept.md#hier-5.6)).
 
-Норматив: [03_reference_implementations.md](../specs/implementation/03_reference_implementations.md).
+Норматив: [implementation.md](../specs/implementation.md).
 
 ## 5. С чего начать реализатору
 
-Сначала концепция: [posoc-concept.md](posoc-concept.md) (ментальная модель, гарантии, параметры), затем форматы записей и канонизация ([01_records_formats.md](../specs/implementation/01_records_formats.md)), криптография и объёмы ([02_crypto.md](../specs/implementation/02_crypto.md)), транспорт и узловая механика ([04_node_transport.md](../specs/implementation/04_node_transport.md)) и список обязательных компонентов реализации ([03_reference_implementations.md](../specs/implementation/03_reference_implementations.md)). Термины — [glossary.md](../specs/glossary.md).
+Сначала концепция: [posoc-concept.md](posoc-concept.md) (ментальная модель, гарантии, параметры), затем форматы записей и канонизация ([implementation.md](../specs/implementation.md)), криптография и объёмы ([implementation.md](../specs/implementation.md)), транспорт и узловая механика ([implementation.md](../specs/implementation.md)) и список обязательных компонентов реализации ([implementation.md](../specs/implementation.md)). Термины — [glossary.md](../specs/glossary.md).
