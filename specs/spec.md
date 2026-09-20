@@ -275,11 +275,17 @@ Membership — это **результат детерминированного 
 ### 5.4 Thresholds и disjoint count
 
 1. **Disjoint count:**
+
 $$U_{G_1 \Rightarrow G_2} = \big|\{\,X \in R_{str}(G_1):\ \exists\, O \in R_{str}(G_2) \setminus R_{str}(G_1),\ \text{связь } (X,O) \text{ активна}\,\}\big|$$
+
 2. **Пороги** ($avg = (|G_1|+|G_2|)/2$, $\rho = |big|/|small|$, $f = f(avg)$, $\kappa = \kappa(avg)$):
+
 $$f(m) = \begin{cases} 0.5, & m < 30 \\ 0.05 + 0.45 \cdot 1.5^{-\log_{10}(m/30)}, & 30 \le m \le 10^4 \\ 0.05 + 0.1618 \cdot 4^{-\log_{10}(m/10^4)}, & m > 10^4 \end{cases}$$
+
 $$\gamma(\rho) = \min(1,\ f + c(\rho-1)),\ c = 0.25;\qquad \kappa(m) = \min(\lfloor m/2.5 \rfloor,\ 4500)$$
+
 $$t_{big} = \min\big(|big|,\ \max(\lfloor f \cdot |big| \rfloor,\ \kappa) + 1\big),\qquad t_{small} = \min\big(|small|,\ \max(\lfloor f \cdot |small| \rfloor,\ \lfloor \gamma \cdot |small| \rfloor,\ \kappa) + 1\big)$$
+
 3. **Пара проходит** ⟺ $U_{G_1 \Rightarrow G_2} \ge t_{G_1}$ ∧ $U_{G_2 \Rightarrow G_1} \ge t_{G_2}$.
 4. **Инварианты:**
 
