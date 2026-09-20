@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+H(B): минимальное число людей-злоумышленников (готовых ставить подписи),
+необходимое для включения B ботов в общую (человеческую) сеть PoSoc v0.13.
+
+Все формулы — из specs/spec.md: §5.4 (f-кривая, gamma, kappa, disjoint count),
+§5.5 (attach/bootstrap/C1-C3), §4.3 (roster/quorum/quench/cap-30), §9 (параметры).
+
+Модель (см. отчёт):
+  Путь A (roster): боты вступают в человеческую L0(m): quorum+cohesion = floor(m/2)+1
+      от текущих членов (§4.3.4ab); roster <= 30 (§9 cap-30); выживание родительского
+      ребра: t_min(m+B) <= m (люди дают U=m внешних связей, боты — 0).
+  Путь C (attach): бот-поддерево (R_str = B >= 4) пристраивается ребёнком к живому
+      человеческому GH_h, у которого уже есть ребёнок S (|R_str(S)| = s):
+        U_{S->bot} = H (только соучастники из S линкуют ботов) >= t_side(s, B)
+        U_{bot->S} = B_distinct (боты линкуют соучастников; FRIEND без капа, §2.6.2)
+      Выживание родительского ребра GH_h (каскад §5.6.1, §5.6.5, дрейф §10.11):
+        U_{GH_h->W} <= s  =>  t_min(s+B) <= s, где t_min(N) = min_w t_side(N, w).
+      C1 ботам бесплатен (MEMBER_OF permissionless, §1.3/§5.2), C3 тривиален.
+  B < 4: живой бот-L0 невозможен (quench<4 §4.3.6, §4.5; attach требует R_str != ∅ §5.5)
+      => только путь A.
+
+Честные соседи W дают органические связи (лучшая для атакующего топология) —
+фиксированное допущение "best case", см. отчёт.
+"""
+import math, sys, csv, os
+from pathlib import Path
+
+EPS = 1e-9
+# Все артефакты пишутся рядом со скриптом (портативность: запуск из specs/attack/).
+OUT = str(Path(__file__).resolve().parent)
+
+def f(m):
+    """§5.4.2: f(m)=0.5 при m<30; 0.05+0.45*1.5^{-log10(m/30)} при 30<=m<=1e4;
+       0.05+0.1618*4^{-log10(m/1e4)} при m>1e4."""
+    if m < 30: return 0.5
+    if m <= 1e4: return 0.05 + 0.45 * 1.5 ** (-math.log10(m / 30.0))
+    return 0.05 + 0.1618 * 4 ** (-math.log10(m / 1e4))
+
+def kappa(m):
+    """§5.4.2: kappa(m) = min(floor(m/2.5), 4500)."""
+    return min(math.floor(m / 2.5 + EPS), 4500)
+
+def gamma(rho, f_):
+    """§5.4.2: gamma(rho)=min(1, f + c*(rho-1)), c=0.25."""
+    return min(1.0, f_ + 0.25 * (rho - 1.0))
+
+def t_side(a, b):
+    """Порог стороны с размером ростера a в паре (a, b), §5.4.2-3.
+       Возвращает (t, доминирующий член, gamma)."""
+    avg = (a + b) / 2.0
+    f_ = f(avg); k_ = kappa(avg)
+    fa = math.floor(f_ * a + EPS)
+    if a > b:                      # большая сторона: gamma НЕ применяется
+        t = min(a, max(fa, k_) + 1)
+        dom = 'f*s' if fa >= k_ else 'kappa'
+        return t, dom, f_
+    if a < b:                      # малая сторона: gamma входит
+        g_ = gamma(b / a, f_)
+        ga = math.floor(g_ * a + EPS)
+        t = min(a, max(fa, ga, k_) + 1)
+        if g_ >= 1.0 - 1e-12: dom = 'unanim(gamma=1)'
+        elif ga >= max(fa, k_): dom = 'gamma*s'
+        elif k_ >= fa: dom = 'kappa'
+        else: dom = 'f*s'
+        return t, dom, g_
+    # равная пара (rho=1, gamma=f): §5.4.4(iii)
+    t = min(a, max(fa, k_) + 1)
+    return t, ('f*s' if fa >= k_ else 'kappa'), f_
+
+def _A(N, avg2):
+    return math.floor(f(avg2) * N + EPS)
+
+def t_min(N):
+    """min по сестрам w (размер ростера W) порога стороны N в паре (N, w).
+       avg2=(N+w)/2; при w<=N: t=max(floor(f(avg2)*N), kappa(avg2))+1;
+       A убывает по avg2, kappa не убывает => max унимодален, минимум на
+       пересечении или на краях. Точно: бинпоиск перехода kappa>=A."""
+    if N < 8:  # w из [4, N]
+        best = None
+        for w in range(4, N + 1):
+            t, _, _ = t_side(N, w)
+            best = t if best is None else min(best, t)
+        # w=N+1, N+2 (малая сторона) — на всякий случай
+        for w in (N + 1, N + 2):
+            t, _, _ = t_side(N, w)
+            best = min(best, t)
+        return best
+    lo_w, hi_w = 4, N
+    # бинпоиск левого w, где kappa(avg2) >= A(avg2)
+    def pred(w):
+        avg2 = (N + w) / 2.0
+        return kappa(avg2) >= _A(N, avg2)
+    if pred(lo_w):
+        wc = lo_w
+    elif not pred(hi_w):
+        wc = hi_w + 1  # A доминирует везде => минимум при w=N
+    else:
+        l, r = lo_w, hi_w
+        while r - l > 1:
+            m = (l + r) // 2
+            if pred(m): r = m
+            else: l = m
+        wc = r
+    cand = sorted(set([lo_w, hi_w, N + 1, N + 2] + [w for w in (wc - 2, wc - 1, wc, wc + 1, wc + 2) if lo_w <= w <= hi_w]))
+    best = None
+    for w in cand:
+        t, _, _ = t_side(N, w)
+        best = t if best is None else min(best, t)
+    return best
+
+# ---------- Валидация по §9 ----------
+def validate_spec():
+    # §9 "Справочные пороги равных пар": t = min(m, max(floor(f(m)m), kappa(m))+1)
+    tbl = [(300, 0.350, 121), (1e3, 0.293, 401), (3e3, 0.250, 1201), (1e4, 0.212, 4001),
+           (3e4, 0.134, 4501), (1e5, 0.090, 9046), (1e6, 0.060, 60113), (1e8, 0.051, 5063204)]
+    for m, fm, tm in tbl:
+        assert abs(f(m) - fm) < 6e-4, (m, f(m), fm)
+        t, _, _ = t_side(int(m), int(m))
+        assert t == tm, (m, t, tm)
+    # §9 примеры
+    t30, _, _ = t_side(30, 60); t60, _, _ = t_side(60, 30)
+    assert (t30, t60) == (22, 29), (t30, t60)
+    t4, _, _ = t_side(4, 8); t8, _, _ = t_side(8, 4)
+    assert (t4, t8) == (4, 5), (t4, t8)
+    t4, _, _ = t_side(4, 30); t30, _, _ = t_side(30, 4)
+    assert (t4, t30) == (4, 16), (t4, t30)
+    t, _, _ = t_side(30, 30); assert t == 16
+    t, _, _ = t_side(4, 4);   assert t == 3    # §5.4.4(iv)
+    # t_min против полного перебора для N<=2600
+    for N in range(5, 2601):
+        bf = min(t_side(N, w)[0] for w in range(4, N + 3))
+        assert t_min(N) == bf, (N, t_min(N), bf)
+    print("[OK] валидация против §9 (таблица равных пар, примеры, инвариант iv); t_min==brute для N<2600")
+
+# ---------- H(B) ----------
+def s_min_of(B):
+    """min s>=4: t_min(s+B) <= s (выживание родительского ребра точки входа)."""
+    lo, hi = 4, max(8, 4 * B + 100)   # запас; s > 4B+100 заведомо не оптимум
+    def ok(s): return t_min(s + B) <= s
+    if ok(lo): return lo
+    assert ok(hi), B
+    while hi - lo > 1:
+        m = (lo + hi) // 2
+        if ok(m): hi = m
+        else: lo = m
+    s = hi
+    while s > 4 and t_min((s - 1) + B) <= s - 1:  # защита от не-монотонности floor'ов
+        s -= 1
+    return s
+
+def H_attach(B, dense=False):
+    """min по s порога t_side(s, B) при выживании t_min(s+B)<=s. B>=4."""
+    assert B >= 4
+    sm = s_min_of(B)
+    cands = set([sm, sm + 1, sm + 2, sm + 3, B - 2, B - 1, B, B + 1, B + 2, (sm + B) // 2, (sm + B) // 2 + 1])
+    if dense:
+        cands.update(range(4, 3 * B + 60))
+    best = None
+    for s in sorted(c for c in cands if c >= 4):
+        if t_min(s + B) <= s:
+            t, dom, g = t_side(s, B)
+            if best is None or t < best[0]:
+                best = (t, s, dom, g)
+    return best  # (H, s*, dom, gamma)
+
+def H_roster(B):
+    """Путь A: боты вступают в человеческую L0(m). roster m+B<=30 (cap-30, §9)."""
+    best = None
+    for m in range(4, 31 - B):
+        if t_min(m + B) <= m:
+            h = math.floor(m / 2) + 1   # §4.3.4a quorum (cohesion теми же людьми)
+            if best is None or h < best[0]:
+                best = (h, m, 'quorum floor(m/2)+1 (§4.3.4a)', None)
+    return best
+
+def H_of_B(B, dense=False):
+    r = H_roster(B) if B <= 26 else None
+    a = H_attach(B, dense=dense) if B >= 4 else None
+    if r and (not a or r[0] <= a[0]):
+        return r[0], 'roster L0(m=%d)' % r[1], r[2], r[1]
+    return a[0], 'attach s*=%d%s' % (a[1], '' if a[1] != B else ' (=B)'), '%s (g=%.3f)' % (a[2], a[3]), a[1]
+
+def classify(B):
+    """Метка режима для поиска изломов."""
+    h, path, dom, s = H_of_B(B)
+    if path.startswith('roster'): return 'roster'
+    if s == B: return 'equal s=B'
+    if s == B + 1: return 's=B+1 (f=0.5)'
+    if s < B: return 's*<B'
+    return 's>B'
+
+def t_equal(m):
+    return t_side(m, m)[0]
+
+# ---------- запуск ----------
+validate_spec()
+
+# точечные проверки (ручные ожидания из вывода формул)
+for B, exp in [(1, 3), (2, 3), (3, 3), (4, 3), (5, 4), (10, 6), (16, 9), (30, None)]:
+    h, path, dom, s = H_of_B(B)
+    if exp is not None: assert h == exp, (B, h, exp)
+print("[OK] точечные проверки H(1..4)=3, H(5)=4, H(10)=6, H(16)=9")
+
+# dense-проверка кандидатов против полного перебора s для B<=1500
+for B in list(range(4, 120)) + [150, 300, 700, 1500]:
+    d = H_attach(B, dense=True); c = H_attach(B, dense=False)
+    assert d[0] == c[0], (B, d, c)
+print("[OK] dense==candidate для B<=1500")
+
+# сетка для отчёта
+grid = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 16, 20, 25, 26, 27, 28, 29, 30, 35, 50,
+        100, 126, 127, 130, 300, 500, 533, 1000, 2000, 3000, 5000, 10000, 15000, 17800,
+        20000, 36150, 36200, 40000, 50000, 100000, 200000, 500000, 1000000, 3000000, 10000000]
+rows = []
+for B in grid:
+    h, path, dom, s = H_of_B(B)
+    te = t_equal(B) if B >= 4 else None
+    rows.append((B, h, path, dom, s, te, (h / B if B else None)))
+
+# поиск точных изломов: границы режимов
+breaks = []
+prev = None
+import bisect
+Bscan = sorted(set(list(range(1, 400)) + [int(x) for x in [500, 700, 1000, 1500, 2000, 3000, 4000, 5000, 7000, 10000, 12000, 15000, 16000, 17000, 17500, 17800, 18000, 19000, 20000, 22500, 25000, 30000, 35000, 36000, 36100, 36200, 36500, 37000, 40000, 45000, 50000, 60000, 70000, 80000, 100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000]]))
+regimes = []
+for B in Bscan:
+    regimes.append((B, classify(B), H_of_B(B)[0]))
+for i in range(1, len(regimes)):
+    if regimes[i][1] != regimes[i - 1][1]:
+        lo, hi = regimes[i - 1][0], regimes[i][0]
+        # уточняем бинпоиском по классам (классы кусочно-постоянны)
+        l, r = lo, hi
+        while r - l > 1:
+            m = (l + r) // 2
+            if classify(m) == regimes[i - 1][1]: l = m
+            else: r = m
+        breaks.append((r, regimes[i - 1][1], regimes[i][1], H_of_B(r)[0], H_of_B(l)[0]))
+
+print("\n=== Изломы режимов (B, было -> стало, H) ===")
+for b in breaks: print(b)
+
+# H = 4501-плато: границы
+flat = [B for B in Bscan if H_of_B(B)[0] == 4501]
+if flat: print("\nПлато H=4501: B in [%d..%d] (по сетке скана)" % (min(flat), max(flat)))
+
+# CSV
+with open(os.path.join(OUT, 'H_of_B.csv'), 'w', newline='') as fh:
+    w = csv.writer(fh, delimiter=';')
+    w.writerow(['B', 'H(B)', 'путь_включения', 's*_или_m', 'доминирующий_член_порога', 't_equal(B)_для_сравнения', 'H/B'])
+    for B, h, path, dom, s, te, ratio in rows:
+        w.writerow([B, h, path, s, dom, te if te else '', '%.4f' % ratio if ratio else ''])
+print("\nCSV записан")
+
+# консольная сводка сетки
+print("\n=== Сетка ===")
+print("%-10s %-8s %-22s %-10s %-24s %-10s" % ('B', 'H', 'путь', 's*/m', 'член', 't_equal'))
+for B, h, path, dom, s, te, ratio in rows:
+    print("%-10d %-8d %-22s %-10d %-24s %-10s" % (B, h, path.split(' ')[0] + (' ' + path.split(' ')[1] if path.startswith('attach') else ' L0'), s, dom[:22], te if te else '-'))
+
+# доп.: максимум B/H (ботов на одного соучастника) на плотной сетке
+pts = [(B, H_of_B(B)[0]) for B in sorted(set([int(1.1**k) for k in range(8, 163)] + [11250, 17800, 18000, 36000, 36100, 36149, 36150]))]
+mb = max(pts, key=lambda p: p[0] / p[1])
+print("\nМаксимум B/H: B=%d, H=%d, B/H=%.2f" % (mb[0], mb[1], mb[0] / mb[1]))
+
+# ---------- точные границы режимов ----------
+def find_first(pred, lo, hi):
+    while lo < hi:
+        m = (lo + hi) // 2
+        if pred(m): hi = m
+        else: lo = m + 1
+    return lo
+
+def dom_at(B):
+    a = H_attach(B) if B >= 4 else None
+    return a[2] if a else 'roster'
+
+b_gamma_kappa = find_first(lambda B: dom_at(B).startswith('kappa'), 301, 500)
+b_flat_start  = find_first(lambda B: H_of_B(B)[0] == 4501, 15000, 20000)
+b_flat_end    = find_first(lambda B: H_of_B(B)[0] > 4501, b_flat_start, 40000) - 1
+print("\nТочные границы: gamma*s->kappa при B=%d; плато 4501: B=[%d..%d]" %
+      (b_gamma_kappa, b_flat_start, b_flat_end))
+for B in (b_flat_start - 1, b_flat_start, b_flat_end, b_flat_end + 1):
+    h, path, dom, s = H_of_B(B)
+    print("  B=%d: H=%d (%s, s*=%d, %s)" % (B, h, path, s, dom))
+
+# ---------- артефакты ----------
+# markdown-таблица
+with open(os.path.join(OUT, 'H_of_B.md'), 'w') as fh:
+    fh.write('# H(B): минимальное число людей-соучастников для включения B ботов\n\n')
+    fh.write('Спека PoSoc v0.13 (specs/spec.md): §5.4, §5.5, §4.3, §9. Вывод формул — см. отчёт.\n\n')
+    fh.write('| B | H(B) | путь | s* / m | порог из | t_equal(B) | H/B |\n|---|---|---|---|---|---|---|\n')
+    for B, h, path, dom, s, te, ratio in rows:
+        fh.write('| %d | %d | %s | %d | %s | %s | %.3f |\n' %
+                 (B, h, path, s, dom.split(' (')[0], te if te else '—', ratio))
+print("MD записан")
+
+# ASCII-график (горизонтальные бары, длина ~ log10(H))
+Hmax = max(r[1] for r in rows)
+Lmax = 56
+print("\nASCII: H(B) (длина бара ~ log10 H; max H=%d)" % Hmax)
+hdr = '%-9s %-8s %s' % ('B', 'H', '')
+print(hdr)
+lines = []
+for B, h, path, dom, s, te, ratio in rows:
+    ln = max(1, round(math.log10(h) / math.log10(Hmax) * Lmax))
+    lines.append('%-9d %-8d %s (%.3f·B)' % (B, h, '█' * ln, ratio))
+ascii_chart = '\n'.join([hdr] + lines)
+with open(os.path.join(OUT, 'H_of_B.ascii.txt'), 'w') as fh:
+    fh.write(ascii_chart + '\n')
+print(ascii_chart)
+
+# данные для PNG
+dense = sorted(set([int(round(10 ** (k / 40.0))) for k in range(0, 281)] + grid + [b_flat_start, b_flat_end]))
+with open(os.path.join(OUT, 'dense_for_plot.csv'), 'w', newline='') as fh:
+    w = csv.writer(fh, delimiter=';')
+    w.writerow(['B', 'H', 'H_Kmin10', 'H_summit'])
+    for B in dense:
+        h = H_of_B(B)[0]
+        summit = t_side(4, B)[0]  # деградировавший summit: единогласная сестра L0(4)
+        w.writerow([B, h, max(h, 10), summit])
+print("\ndense_for_plot.csv записан (%d точек)" % len(dense))
