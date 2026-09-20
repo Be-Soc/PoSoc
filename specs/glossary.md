@@ -174,7 +174,7 @@
 
 <a id="glos-vertex"></a>
 
-- **Vertex** — ≥ 2 живых детей ([HIER-5.5](concept.md#hier-5.5)).
+- **Vertex** — 2 живых ребёнка — предел бинарности ([HIER-5.5](concept.md#hier-5.5), [HIER-5.5.15](concept.md#hier-5.5.15)).
 
 <a id="glos-free-group"></a>
 
@@ -190,7 +190,7 @@
 
 <a id="glos-c2"></a>
 
-- **C2 (all-pairs)** — corroboration: пары со всеми живыми сёстрами ([HIER-5.5](concept.md#hier-5.5)).
+- **C2 (corroboration)** — пара с единственной живой сестрой; детей у сообщества ≤ 2 ([HIER-5.5](concept.md#hier-5.5), [HIER-5.5.15](concept.md#hier-5.5.15)).
 
 <a id="glos-c3"></a>
 
@@ -206,7 +206,7 @@
 
 <a id="glos-bootstrap"></a>
 
-- **Bootstrap / S-set** — совместная активация ≥ 2 рёбер к пустой группе; все пары внутри $S$; окно на фиксированном $S$; выбор: inclusion-maximal → ранний старт → лексикографический минимум ([HIER-5.5](concept.md#hier-5.5)).
+- **Bootstrap / S-set** — совместная активация ровно 2 рёбер к пустой группе (бинарность); все пары внутри $S$; окно на фиксированном $S$; выбор: ранний старт → лексикографический минимум ([HIER-5.5](concept.md#hier-5.5), [HIER-5.5.15](concept.md#hier-5.5.15)).
 
 <a id="glos-attach-detach"></a>
 

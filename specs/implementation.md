@@ -115,4 +115,4 @@ Record = `{type, t_sign, payload, sigs}`; sigs — массив `{pk, sig}`, **�
 
 1. **Реконструкция пары:** binding, выбор максимального $t_{sign}$ отдельно для каждого направления, кламп и truce ([LINK-3.2](concept.md#link-3.2)).
 2. **Ростер L0:** cap, growth priority и синхронные раунды фильтрации ([L0-4.3](concept.md#l0-4.3)).
-3. **Вывод рёбер:** all-pairs C2, acyclicity C3, hold window, S-bootstrap и freeze ∥ window ([HIER-5.5](concept.md#hier-5.5)–[HIER-5.6](concept.md#hier-5.6)).
+3. **Вывод рёбер:** бинарные C2-пары (не более двух детей на сообщество), acyclicity C3, hold window, S-bootstrap ($S = 2$) и freeze ∥ window ([HIER-5.5](concept.md#hier-5.5)–[HIER-5.6](concept.md#hier-5.6)).
